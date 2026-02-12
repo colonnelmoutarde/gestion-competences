@@ -40,6 +40,48 @@ try:
 except:
     st.warning("⚠️ Mode Consultation Seule : Connexion perdue.")
 
+# --- INITIALISATION ET CHARGEMENT ---
+# On crée des tableaux vides par défaut pour éviter le "NameError"
+df_agents = pd.DataFrame(columns=['Nom', 'Statut'])
+df_hab = pd.DataFrame(columns=['Agent', 'Type', 'Date_Peremption'])
+df_outils = pd.DataFrame(columns=['ID_Outil', 'Nom', 'Statut', 'Dernier_Controle', 'Periodicite_Mois'])
+
+try:
+    df_agents = conn.read(worksheet="Agents")
+    df_hab = conn.read(worksheet="Habilitations")
+    df_outils = conn.read(worksheet="Outillage")
+    connexion_ok = True
+except Exception as e:
+    st.warning("⚠️ Mode Consultation Seule : Connexion perdue. Vérifiez vos Secrets et vos onglets Google Sheets.")
+    connexion_ok = False
+
+# --- LOGIQUE OUTILLAGE (M-1 et J-90) ---
+def calculer_statut_outil(row):
+    if pd.isna(row['Dernier_Controle']): return "⚪ Inconnu"
+    
+    dernier = pd.to_datetime(row['Dernier_Controle']).date()
+    # On ajoute la périodicité en mois
+    echeance = dernier + pd.DateOffset(months=int(row['Periodicite_Mois']))
+    echeance = echeance.date()
+    aujourdhui = date.today()
+    
+    # Différence en jours
+    jours_restants = (echeance - aujourdhui).days
+    
+    if row['Statut'] == "NC": return "🔴 NON CONFORME"
+    if jours_restants <= 0: return "🔴 EXPIRE"
+    
+    # Alerte M-1 pour périodicité courte (< 6 mois) ou J-90 pour le reste
+    seuil_alerte = 30 if int(row['Periodicite_Mois']) <= 6 else 90
+    
+    if jours_restants <= seuil_alerte:
+        return f"🟠 ALERTE ({jours_restants} j)"
+    return "🟢 CONFORME"
+
+# On applique le calcul si les données sont là
+if not df_outils.empty:
+    df_outils['Etat_Alerte'] = df_outils.apply(calculer_statut_outil, axis=1)
+    
 # --- MODULE 1 : TABLEAU DE BORD ---
 if choix == "Tableau de Bord":
     st.header("📊 Cockpit de Pilotage")
