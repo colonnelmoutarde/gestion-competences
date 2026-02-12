@@ -34,11 +34,13 @@ choix = st.sidebar.selectbox("Menu", menu)
 
 # Chargement global pour le mode consultation
 try:
-    df_agents = charger_donnees("Agents")
-    df_hab = charger_donnees("Habilitations")
-    df_outils = charger_donnees("Outillage")
-except:
-    st.warning("⚠️ Mode Consultation Seule : Connexion perdue.")
+    df_agents = conn.read(worksheet="Agents")
+    df_hab = conn.read(worksheet="Habilitations")
+    df_outils = conn.read(worksheet="Outillage")
+    st.success("✅ Connexion établie avec succès !") # Apparaîtra si ça marche
+except Exception as e:
+    st.error(f"❌ Erreur technique : {e}") # Nous dira pourquoi ça bloque
+    connexion_ok = False
 
 # --- INITIALISATION ET CHARGEMENT ---
 # On crée des tableaux vides par défaut pour éviter le "NameError"
