@@ -9,64 +9,36 @@ from fpdf import FPDF
 # --- CONFIGURATION PAGE ---
 st.set_page_config(page_title="GMAO & Compétences", layout="wide")
 
-# --- CONNEXION ET CHARGEMENT ---
-try:
-    # On récupère l'URL proprement depuis les secrets
-    url_gsheet = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    
-    # FORCE LE CHARGEMENT VIA L'URL DIRECTE
-    # On ajoute spreadsheet=url_gsheet pour forcer le mode "Lien Public"
-    df_agents = conn.read(spreadsheet=url_gsheet, worksheet="Agents")
-    df_hab = conn.read(spreadsheet=url_gsheet, worksheet="Habilitations")
-    df_outils = conn.read(spreadsheet=url_gsheet, worksheet="Outillage")
-    
-    st.success("✅ Connexion réussie ! Les données sont là.")
-    connexion_ok = True
-except Exception as e:
-    st.error(f"❌ Erreur de lecture : {e}")
-    st.info("Astuce : Vérifiez que le partage Google Sheet est bien sur 'Tous les utilisateurs disposant du lien'.")
-    connexion_ok = False
-
 # --- INITIALISATION DES VARIABLES (Anti-crash) ---
-# On crée des tableaux vides pour que l'app affiche "0 résultats" au lieu de planter
+# On les crée AVANT pour qu'elles existent partout dans le code
 df_agents = pd.DataFrame(columns=['Nom', 'Statut'])
 df_hab = pd.DataFrame(columns=['Agent', 'Type', 'Date_Peremption'])
 df_outils = pd.DataFrame(columns=['ID_Outil', 'Nom', 'Statut', 'Dernier_Controle', 'Periodicite_Mois'])
 connexion_ok = False
 
-# --- BLOC DE DIAGNOSTIC ET CHARGEMENT ---
+# --- CONNEXION GOOGLE SHEETS ---
 st.title("⚙️ Système Intégré : Compétences & Outillage")
+conn = st.connection("gsheets", type=GSheetsConnection)
 
+# --- BLOC DE CHARGEMENT "CHOC" ---
 try:
-    # 1. Test du Secret
-    url_test = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    # 1. On récupère l'URL proprement depuis les secrets
+    url_gsheet = st.secrets["connections"]["gsheets"]["spreadsheet"]
     
-    if len(url_test) < 80:
-        st.error(f"⚠️ URL TRONQUÉE : Votre lien dans les Secrets ne fait que {len(url_test)} caractères. Il est probablement coupé par un retour à la ligne.")
+    # 2. FORCE LE CHARGEMENT VIA L'URL DIRECTE (La méthode choc)
+    # On passe l'URL directement dans chaque lecture pour contourner l'erreur 400
+    df_agents = conn.read(spreadsheet=url_gsheet, worksheet="Agents")
+    df_hab = conn.read(spreadsheet=url_gsheet, worksheet="Habilitations")
+    df_outils = conn.read(spreadsheet=url_gsheet, worksheet="Outillage")
     
-    # 2. Tentative de lecture
-    df_agents = conn.read(worksheet="Agents")
-    df_hab = conn.read(worksheet="Habilitations")
-    df_outils = conn.read(worksheet="Outillage")
-    
-    st.success("✅ Connexion réussie : Données chargées depuis Google Sheets.")
+    st.success("✅ Connexion réussie ! Les données sont chargées.")
     connexion_ok = True
 
 except Exception as e:
-    st.error(f"❌ Erreur technique : {e}")
-    st.warning("Mode Consultation Seule : L'application utilise des données vides. Vérifiez l'URL dans vos Secrets.")
+    st.error(f"❌ Erreur de connexion : {e}")
+    st.warning("Mode Consultation Seule : Vérifiez que votre lien dans 'Secrets' est sur UNE SEULE LIGNE.")
 
 # --- FONCTIONS UTILES ---
-def alerte_habilitation(date_peremption):
-    if pd.isna(date_peremption): return "⚪ Inconnu"
-    aujourdhui = date.today()
-    # Logique Septembre N pour expiration N+1
-    if aujourdhui.month >= 9 and date_peremption.year == aujourdhui.year + 1:
-        return "🟠 Planification N+1"
-    if date_peremption <= aujourdhui:
-        return "🔴 Périmé"
-    return "🟢 Valide"
-
 def calculer_statut_outil(row):
     if pd.isna(row['Dernier_Controle']): return "⚪ Inconnu"
     try:
@@ -86,7 +58,7 @@ def calculer_statut_outil(row):
     except:
         return "❌ Erreur format date"
 
-# Application de la logique outillage
+# Application de la logique outillage si les données existent
 if not df_outils.empty and 'Dernier_Controle' in df_outils.columns:
     df_outils['Etat_Alerte'] = df_outils.apply(calculer_statut_outil, axis=1)
 
@@ -103,26 +75,27 @@ if choix == "Tableau de Bord":
     with col1:
         st.subheader("🚨 Alertes Habilitations")
         if not df_hab.empty:
-            st.dataframe(df_hab)
+            st.dataframe(df_hab, use_container_width=True)
         else:
-            st.info("Aucune habilitation enregistrée.")
+            st.info("Aucune donnée d'habilitation à afficher.")
         
     with col2:
         st.subheader("⚖️ Comparateur d'Agents")
         if not df_agents.empty:
-            agents_sel = st.multiselect("Sélectionner agents", df_agents['Nom'].unique())
+            liste_agents = df_agents['Nom'].dropna().unique()
+            agents_sel = st.multiselect("Sélectionner agents", liste_agents)
+            if agents_sel:
+                st.write(f"Comparaison de : {', '.join(agents_sel)}")
         else:
-            st.write("En attente de données...")
+            st.write("En attente de la liste des agents...")
 
 # --- MODULE 2 : OUTILLAGE ---
 elif choix == "Outillage":
     st.header("🔧 Suivi Réglementaire")
-    tab1, tab2 = st.tabs(["Inventaire", "Validation par Lot"])
-    with tab1:
-        if not df_outils.empty:
-            st.dataframe(df_outils)
-        else:
-            st.info("L'inventaire est vide.")
+    if not df_outils.empty:
+        st.dataframe(df_outils, use_container_width=True)
+    else:
+        st.info("L'inventaire d'outillage est vide ou inaccessible.")
 
 # --- MODULE 3 : BILAN PDF ---
 elif choix == "Bilan PDF":
@@ -130,6 +103,6 @@ elif choix == "Bilan PDF":
     if not df_agents.empty:
         agent_pdf = st.selectbox("Choisir l'agent", df_agents['Nom'].unique())
         if st.button("Générer PDF"):
-            st.success(f"PDF pour {agent_pdf} en cours de préparation...")
+            st.info(f"Préparation du rapport pour {agent_pdf}...")
     else:
-        st.error("Impossible de générer un PDF sans liste d'agents.")
+        st.error("Impossible de générer un rapport sans données.")
