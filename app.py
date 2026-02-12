@@ -9,8 +9,23 @@ from fpdf import FPDF
 # --- CONFIGURATION PAGE ---
 st.set_page_config(page_title="GMAO & Compétences", layout="wide")
 
-# --- CONNEXION GOOGLE SHEETS ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- CONNEXION ET CHARGEMENT ---
+try:
+    # On récupère l'URL proprement depuis les secrets
+    url_gsheet = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    
+    # FORCE LE CHARGEMENT VIA L'URL DIRECTE
+    # On ajoute spreadsheet=url_gsheet pour forcer le mode "Lien Public"
+    df_agents = conn.read(spreadsheet=url_gsheet, worksheet="Agents")
+    df_hab = conn.read(spreadsheet=url_gsheet, worksheet="Habilitations")
+    df_outils = conn.read(spreadsheet=url_gsheet, worksheet="Outillage")
+    
+    st.success("✅ Connexion réussie ! Les données sont là.")
+    connexion_ok = True
+except Exception as e:
+    st.error(f"❌ Erreur de lecture : {e}")
+    st.info("Astuce : Vérifiez que le partage Google Sheet est bien sur 'Tous les utilisateurs disposant du lien'.")
+    connexion_ok = False
 
 # --- INITIALISATION DES VARIABLES (Anti-crash) ---
 # On crée des tableaux vides pour que l'app affiche "0 résultats" au lieu de planter
