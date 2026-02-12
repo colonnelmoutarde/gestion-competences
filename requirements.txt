@@ -1,5 +1,5 @@
-streamlit
-st-gsheets-connection
+streamlit>=1.31.0
+st-gsheets-connection>=0.0.3
 pandas
 plotly
 fpdf2
