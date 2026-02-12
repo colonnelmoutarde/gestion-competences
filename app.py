@@ -20,24 +20,25 @@ connexion_ok = False
 st.title("⚙️ Système Intégré : Compétences & Outillage")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- BLOC DE CHARGEMENT "CHOC" ---
+# --- CONNEXION DIRECTE (PLAN C) ---
+def charger_data(id_onglet):
+    # On récupère l'URL de base et on ajoute l'ID de l'onglet (gid)
+    # GID : Agents=0, Habilitations=413247074, Outillage=1710929285
+    base_url = st.secrets["url_fiche"]
+    return pd.read_csv(f"{base_url}{id_onglet}")
+
 try:
-    # 1. On récupère l'URL proprement depuis les secrets
-    url_gsheet = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    # On utilise les GID (identifiants d'onglets) que j'ai trouvé dans ton fichier
+    df_agents = charger_data("0") 
+    df_hab = charger_data("413247074")
+    df_outils = charger_data("1710929285")
     
-    # 2. FORCE LE CHARGEMENT VIA L'URL DIRECTE (La méthode choc)
-    # On passe l'URL directement dans chaque lecture pour contourner l'erreur 400
-    df_agents = conn.read(spreadsheet=url_gsheet, worksheet="Agents")
-    df_hab = conn.read(spreadsheet=url_gsheet, worksheet="Habilitations")
-    df_outils = conn.read(spreadsheet=url_gsheet, worksheet="Outillage")
-    
-    st.success("✅ Connexion réussie ! Les données sont chargées.")
+    st.success("✅ Connexion directe établie ! Les données sont synchronisées.")
     connexion_ok = True
-
 except Exception as e:
-    st.error(f"❌ Erreur de connexion : {e}")
-    st.warning("Mode Consultation Seule : Vérifiez que votre lien dans 'Secrets' est sur UNE SEULE LIGNE.")
-
+    st.error(f"❌ Erreur de lecture directe : {e}")
+    connexion_ok = False
+    
 # --- FONCTIONS UTILES ---
 def calculer_statut_outil(row):
     if pd.isna(row['Dernier_Controle']): return "⚪ Inconnu"
